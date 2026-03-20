@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:5000/api';
+const BASE_URL = 'https://restaurant-app-reactnative-backend.onrender.com/';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
