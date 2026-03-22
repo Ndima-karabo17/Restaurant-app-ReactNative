@@ -12,7 +12,7 @@ export default function SignInScreen() {
   const handleSignIn = async () => {
     try {
       const response = await apiClient.post('/signin', { email, password });
-      if (response.data.token) router.replace('/home');
+      if (response.data.token) router.replace('/checkout-message');
     } catch (error) {
       Alert.alert('Error', 'Invalid email or password.');
     }

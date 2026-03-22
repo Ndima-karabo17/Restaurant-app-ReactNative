@@ -1,70 +1,159 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, Text, Alert, ScrollView } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, Text, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { apiClient } from '../src/api/client';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCart } from '../src/context/CartContext';
 
-export default function SignUpScreen() {
+export default function SignInScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [address, setAddress] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const { cart, totalPrice, clearCart } = useCart();
 
-  const handleSignUp = async () => {
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Missing Fields', 'Please enter your email and password.');
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await apiClient.post('/signup', { email, password, address });
-      if (response.status === 201) {
-        Alert.alert('Success', 'Account created! Please login.');
-        router.push('/');
+      // 1. Sign in
+      const response = await apiClient.post('/signin', { email, password });
+      if (response.data.token) {
+        await AsyncStorage.setItem('token', response.data.token);
+        apiClient.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+
+        // 2. Place the order
+        const orderResponse = await apiClient.post('/orders', {
+          items: cart,
+          total: totalPrice,
+          userId: response.data.user?.id || null,
+        });
+
+        if (orderResponse.status === 201) {
+          clearCart();
+          router.replace('/checkout-message');
+        }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Signup failed. Check your connection or details.');
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Invalid email or password.';
+      Alert.alert('Sign In Failed', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Join us for secure checkout, order tracking, and the best food in town</Text>
+    <View style={styles.container}>
 
-      <Text style={styles.label}>Email Address:</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="mail-outline" size={20} color="#000" style={styles.icon} />
-        <TextInput placeholder="example@mail.com" style={styles.input} onChangeText={setEmail} value={email} autoCapitalize="none" keyboardType="email-address" />
-      </View>
-
-      <Text style={styles.label}>Password:</Text>
-      <View style={styles.inputContainer}>
-        <Ionicons name="lock-closed-outline" size={20} color="#000" style={styles.icon} />
-        <TextInput placeholder="Create a strong password" style={styles.input} secureTextEntry onChangeText={setPassword} value={password} />
-      </View>
-
-      <Text style={styles.label}>Delivery Address:</Text>
-      <View style={[styles.inputContainer, { alignItems: 'flex-start', paddingTop: 12 }]}>
-        <Ionicons name="location-outline" size={20} color="#050505" style={styles.icon} />
-        <TextInput placeholder="Street, City, Zip Code" style={[styles.input, { height: 60 }]} onChangeText={setAddress} value={address} multiline textAlignVertical="top" />
-      </View>
-
-      <TouchableOpacity style={styles.orangeButton} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Sign Up</Text>
+      {/* Header */}
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Ionicons name="arrow-back" size={22} color="#333" />
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.push('/')}>
-        <Text style={styles.link}>Already have an account? <Text style={{ fontWeight: 'bold', color: 'orange' }}>Login</Text></Text>
-      </TouchableOpacity>
-    </ScrollView>
+      <View style={styles.topSection}>
+        <View style={styles.iconCircle}>
+          <Text style={styles.iconEmoji}>🍽️</Text>
+        </View>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Sign in to complete your order</Text>
+      </View>
+
+      {/* Form */}
+      <View style={styles.form}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email Address</Text>
+          <View style={styles.inputContainer}>
+            <Ionicons name="mail-outline" size={20} color="#aaa" style={styles.icon} />
+            <TextInput
+              placeholder="your@email.com"
+              style={styles.input}
+              onChangeText={setEmail}
+              value={email}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholderTextColor="#ccc"
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color="#aaa" style={styles.icon} />
+            <TextInput
+              placeholder="Enter your password"
+              style={styles.input}
+              secureTextEntry={!showPassword}
+              onChangeText={setPassword}
+              value={password}
+              placeholderTextColor="#ccc"
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#aaa" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Cart summary */}
+        {cart.length > 0 && (
+          <View style={styles.orderSummary}>
+            <Ionicons name="cart-outline" size={18} color="orange" />
+            <Text style={styles.orderSummaryText}>
+              {cart.length} item{cart.length > 1 ? 's' : ''} • R{totalPrice.toFixed(2)}
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.orangeButton, loading && styles.disabledBtn]}
+          onPress={handleSignIn}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={styles.buttonText}>Sign In & Place Order</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => router.push('/signup')} style={styles.linkBtn}>
+          <Text style={styles.link}>
+            Don't have an account? <Text style={styles.linkBold}>Sign Up</Text>
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: 'center', padding: 25, backgroundColor: '#fff' },
-  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 8, textAlign: 'center', color: '#333' },
-  subtitle: { fontSize: 14, color: '#666', marginBottom: 30, textAlign: 'center', lineHeight: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#444', marginBottom: 8 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#fafafa', marginBottom: 20, paddingHorizontal: 12 },
+  container: { flex: 1, backgroundColor: '#fff', padding: 24 },
+  backBtn: { marginTop: Platform.OS === 'ios' ? 50 : 10, marginBottom: 10, backgroundColor: '#f5f5f5', padding: 8, borderRadius: 12, alignSelf: 'flex-start' },
+  topSection: { alignItems: 'center', marginVertical: 24 },
+  iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff5e6', justifyContent: 'center', alignItems: 'center', marginBottom: 16, elevation: 3, shadowColor: 'orange', shadowOpacity: 0.2, shadowRadius: 8 },
+  iconEmoji: { fontSize: 36 },
+  title: { fontSize: 26, fontWeight: 'bold', color: '#333', marginBottom: 6 },
+  subtitle: { fontSize: 15, color: '#888', textAlign: 'center' },
+  form: { flex: 1 },
+  inputGroup: { marginBottom: 18 },
+  label: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#eee', borderRadius: 14, backgroundColor: '#fafafa', paddingHorizontal: 14 },
   icon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: '#333' },
-  orangeButton: { backgroundColor: 'orange', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 10, elevation: 4 },
-  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  link: { marginTop: 25, color: 'orange', textAlign: 'center', fontSize: 15 },
+  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#333' },
+  orderSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff5e6', padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#ffe0b2' },
+  orderSummaryText: { color: 'orange', fontWeight: '700', fontSize: 14 },
+  orangeButton: { backgroundColor: 'orange', padding: 17, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, elevation: 4, shadowColor: 'orange', shadowOpacity: 0.3, shadowRadius: 8 },
+  disabledBtn: { backgroundColor: '#ccc', elevation: 0 },
+  buttonText: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
+  linkBtn: { marginTop: 24, alignItems: 'center' },
+  link: { color: '#888', fontSize: 15, textAlign: 'center' },
+  linkBold: { fontWeight: 'bold', color: 'orange' },
 });

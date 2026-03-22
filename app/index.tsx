@@ -130,7 +130,7 @@ export default function HomeScreen() {
                 <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'} 👋</Text>
                 <Text style={styles.header}>Delicious Menu</Text>
               </View>
-              <TouchableOpacity style={styles.cartIcon} onPress={() => router.push('/checkout')}>
+              <TouchableOpacity style={styles.cartIcon} onPress={() => router.push('/signIn')}>
                 <Ionicons name="cart" size={26} color="white" />
                 {cartCount > 0 && (
                   <View style={styles.cartBadge}>
