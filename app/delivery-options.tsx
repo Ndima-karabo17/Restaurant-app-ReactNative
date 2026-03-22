@@ -37,6 +37,7 @@ export default function DeliveryOptionScreen() {
             <Text style={styles.optionText}>Pick Up</Text>
           </TouchableOpacity>
         </View>
+        
         {option === 'delivery' && (
           <View style={styles.addressBox}>
             <Text style={styles.label}>Confirm Delivery Address</Text>

@@ -1,16 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator, Image, Platform } from 'react-native';
 import { useCart } from '../src/context/CartContext';
 import { apiClient } from '../src/api/client';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BottomTabBar from '../src/components/BottomTabBar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CheckoutScreen() {
   const { cart, totalPrice, clearCart, updateQuantity, removeFromCart } = useCart();
   const { paymentType, deliveryMethod, deliveryAddress } = useLocalSearchParams();
   const [loading, setLoading] = useState(false);
+  const [savedAddress, setSavedAddress] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    AsyncStorage.getItem('delivery_address').then(addr => {
+      if (addr) setSavedAddress(addr);
+    });
+  }, []);
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
@@ -21,7 +29,7 @@ export default function CheckoutScreen() {
         total: totalPrice,
         paymentMethod: paymentType || 'card',
         deliveryMethod,
-        deliveryAddress
+        deliveryAddress: deliveryAddress || savedAddress
       });
       if (response.status === 201) {
         clearCart();
@@ -36,6 +44,9 @@ export default function CheckoutScreen() {
 
   const deliveryFee = deliveryMethod === 'pickup' ? 0 : 30;
   const grandTotal = totalPrice + deliveryFee;
+  const displayAddress = deliveryMethod === 'pickup'
+    ? 'Main Branch - Downtown'
+    : (deliveryAddress || savedAddress || 'No address set');
 
   return (
     <View style={styles.wrapper}>
@@ -43,20 +54,16 @@ export default function CheckoutScreen() {
 
         {/* Header */}
         <View style={styles.headerRow}>
-          
           <Text style={styles.header}>My Cart</Text>
-         <View style={styles.headerRight}>
-  <View style={styles.itemCountBadge}>
-    <Text style={styles.itemCountText}>{cart.length} items</Text>
-  </View>
-  <TouchableOpacity 
-    style={styles.addMoreBtn} 
-    onPress={() => router.replace('/')}
-  >
-    <Ionicons name="add" size={18} color="orange" />
-    <Text style={styles.addMoreText}>Add More</Text>
-  </TouchableOpacity>
-</View>
+          <View style={styles.headerRight}>
+            <View style={styles.itemCountBadge}>
+              <Text style={styles.itemCountText}>{cart.length} items</Text>
+            </View>
+            <TouchableOpacity style={styles.addMoreBtn} onPress={() => router.replace('/')}>
+              <Ionicons name="add" size={18} color="orange" />
+              <Text style={styles.addMoreText}>Add More</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Items Card */}
@@ -64,7 +71,6 @@ export default function CheckoutScreen() {
           <Text style={styles.sectionTitle}>Your Items</Text>
           {cart.length > 0 ? cart.map((item) => (
             <View key={item.id} style={styles.itemRow}>
-              {/* Item image */}
               <View style={styles.itemImageWrapper}>
                 {item.image_url ? (
                   <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="cover" />
@@ -74,13 +80,11 @@ export default function CheckoutScreen() {
                   </View>
                 )}
               </View>
-
               <View style={styles.itemMain}>
                 <Text style={styles.itemText} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.itemPrice}>R{(Number(item.price) * item.quantity).toFixed(2)}</Text>
                 <Text style={styles.itemUnitPrice}>R{Number(item.price).toFixed(2)} each</Text>
               </View>
-
               <View style={styles.controls}>
                 <TouchableOpacity onPress={() => updateQuantity(item.id, -1)} style={styles.qtyBtn}>
                   <Ionicons name="remove-circle-outline" size={26} color="orange" />
@@ -107,7 +111,6 @@ export default function CheckoutScreen() {
           {cart.length > 0 && (
             <>
               <View style={styles.divider} />
-              {/* Price breakdown */}
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>Subtotal</Text>
                 <Text style={styles.priceValue}>R{totalPrice.toFixed(2)}</Text>
@@ -140,8 +143,10 @@ export default function CheckoutScreen() {
               <Ionicons name={deliveryMethod === 'pickup' ? 'storefront-outline' : 'location-outline'} size={20} color="orange" />
             </View>
             <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={styles.detailTitle}>{deliveryMethod === 'pickup' ? 'Store Pickup' : 'Delivery to Address'}</Text>
-              <Text style={styles.detailSubtext}>{deliveryMethod === 'pickup' ? 'Main Branch - Downtown' : (deliveryAddress || 'No address set')}</Text>
+              <Text style={styles.detailTitle}>
+                {deliveryMethod === 'pickup' ? 'Store Pickup' : 'Delivery to Address'}
+              </Text>
+              <Text style={styles.detailSubtext}>{displayAddress}</Text>
             </View>
           </View>
         </View>
@@ -192,22 +197,18 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#fdfdfd' },
   container: { flex: 1, padding: 20 },
-
-  // Header
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: Platform.OS === 'ios' ? 10 : 0 },
-  backBtn: { backgroundColor: '#f5f5f5', padding: 8, borderRadius: 12, marginRight: 12 },
   header: { fontSize: 24, fontWeight: 'bold', color: '#333', flex: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   itemCountBadge: { backgroundColor: '#fff3e0', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   itemCountText: { color: 'orange', fontWeight: 'bold', fontSize: 13 },
-
-  // Card
+  addMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff3e0', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  addMoreText: { color: 'orange', fontWeight: 'bold', fontSize: 13 },
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 },
   changeBtn: { backgroundColor: '#fff3e0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   changeText: { color: 'orange', fontWeight: 'bold', fontSize: 12 },
-
-  // Item row
   itemRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
   itemImageWrapper: { width: 56, height: 56, borderRadius: 14, overflow: 'hidden', marginRight: 12, backgroundColor: '#f5f5f5' },
   itemImage: { width: '100%', height: '100%' },
@@ -220,8 +221,6 @@ const styles = StyleSheet.create({
   qtyBtn: { padding: 3 },
   qtyText: { fontSize: 16, fontWeight: 'bold', marginHorizontal: 6, minWidth: 20, textAlign: 'center', color: '#333' },
   deleteBtn: { marginLeft: 8, padding: 3 },
-
-  // Price breakdown
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 4 },
   priceLabel: { fontSize: 14, color: '#888' },
   priceValue: { fontSize: 14, fontWeight: '700', color: '#333' },
@@ -229,26 +228,17 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   totalValue: { fontSize: 22, fontWeight: 'bold', color: 'orange' },
-
-  // Detail rows
   detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   detailIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff3e0', justifyContent: 'center', alignItems: 'center' },
   detailTitle: { fontSize: 15, fontWeight: '700', color: '#333' },
   detailSubtext: { fontSize: 13, color: '#888', marginTop: 2 },
-
-  // Order button
   orderButton: { backgroundColor: 'orange', padding: 18, borderRadius: 18, alignItems: 'center', marginTop: 10, elevation: 4, shadowColor: 'orange', shadowOpacity: 0.4, shadowRadius: 10 },
   disabledButton: { backgroundColor: '#ccc', elevation: 0, shadowOpacity: 0 },
   orderBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   orderButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-
-  // Empty state
   emptyCart: { alignItems: 'center', paddingVertical: 30 },
   emptyText: { color: '#bbb', fontSize: 16, marginTop: 10, marginBottom: 20 },
   shopNowBtn: { backgroundColor: 'orange', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 20 },
   shopNowText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-addMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff3e0', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-addMoreText: { color: 'orange', fontWeight: 'bold', fontSize: 13 },
+  backBtn: { backgroundColor: '#f5f5f5', padding: 8, borderRadius: 12, marginRight: 12 },
 });

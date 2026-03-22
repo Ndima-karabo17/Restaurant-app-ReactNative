@@ -12,10 +12,11 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#fff' },
         }}
       >
+        {/* Location is the first screen on every open */}
+        <Stack.Screen name="location" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="index" options={{ animation: 'fade' }} />
-        <Stack.Screen name="signup" options={{animation:'fade'}}/>
+        <Stack.Screen name="signup" options={{ animation: 'fade' }} />
         <Stack.Screen name="search" options={{ headerShown: false }} />
-        <Stack.Screen name="location" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="orders" options={{ title: 'My Orders', headerShown: true }} />
         <Stack.Screen name="checkout" options={{ title: 'My Cart', headerShown: true }} />

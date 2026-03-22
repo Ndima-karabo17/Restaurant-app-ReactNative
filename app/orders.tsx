@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { apiClient } from '../src/api/client';
 import { useRouter } from 'expo-router';
 import { useCart } from '../src/context/CartContext';
 import { Ionicons } from '@expo/vector-icons';
 import BottomTabBar from '../src/components/BottomTabBar';
+
+interface OrderItem {
+  id: string;
+  name: string;
+  price: string;
+  image_url: string;
+  quantity: number;
+}
 
 interface Order {
   id: number;
@@ -12,6 +20,7 @@ interface Order {
   status: string;
   items: string;
   created_at: string;
+  orderItems?: OrderItem[];
 }
 
 export default function OrdersScreen() {
@@ -25,8 +34,21 @@ export default function OrdersScreen() {
   const fetchOrders = async () => {
     try {
       const response = await apiClient.get('/orders');
-      const data = Array.isArray(response.data) ? response.data : [];
-      setOrders(data);
+      const data: Order[] = Array.isArray(response.data) ? response.data : [];
+
+      // Fetch items with images for each order
+      const ordersWithItems = await Promise.all(
+        data.map(async (order) => {
+          try {
+            const itemsRes = await apiClient.get(`/orders/${order.id}/items`);
+            return { ...order, orderItems: itemsRes.data };
+          } catch {
+            return { ...order, orderItems: [] };
+          }
+        })
+      );
+
+      setOrders(ordersWithItems);
     } catch (error) {
       console.error('Fetch error:', error);
       Alert.alert('Error', 'Could not load orders. Please try again.');
@@ -35,15 +57,14 @@ export default function OrdersScreen() {
     }
   };
 
-  const handleReorder = async (orderId: number) => {
-    Alert.alert('Re-order?', 'This will replace current cart with these items.', [
+  const handleReorder = async (orderId: number, orderItems?: OrderItem[]) => {
+    Alert.alert('Re-order?', 'This will replace your current cart with these items.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Yes, Re-order',
-        onPress: async () => {
-          try {
-            const response = await apiClient.get(`/orders/${orderId}/items`);
-            const cartItems = response.data.map((item: any) => ({
+        onPress: () => {
+          if (orderItems && orderItems.length > 0) {
+            const cartItems = orderItems.map((item) => ({
               id: item.id.toString(),
               name: item.name,
               price: item.price.toString(),
@@ -52,9 +73,8 @@ export default function OrdersScreen() {
             }));
             reorderItems(cartItems);
             router.push('/checkout');
-          } catch (err) {
-            Alert.alert('Error', 'Could not load order items. Please try again.');
-            console.error(err);
+          } else {
+            Alert.alert('Error', 'No items found for this order.');
           }
         }
       },
@@ -67,6 +87,15 @@ export default function OrdersScreen() {
       case 'pending': return 'orange';
       case 'cancelled': return '#f44336';
       default: return '#999';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return 'checkmark-circle';
+      case 'pending': return 'time-outline';
+      case 'cancelled': return 'close-circle';
+      default: return 'ellipse-outline';
     }
   };
 
@@ -96,23 +125,63 @@ export default function OrdersScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.orderCard}>
+
+            {/* Order header */}
             <View style={styles.orderHeader}>
-              <Text style={styles.orderId}>Order #{item.id}</Text>
-              <Text style={styles.totalAmount}>R{Number(item.total_amount).toFixed(2)}</Text>
+              <View>
+                <Text style={styles.orderId}>Order #{item.id}</Text>
+                <Text style={styles.date}>
+                  {new Date(item.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
+              </View>
+              <View style={styles.statusBadge}>
+                <Ionicons name={getStatusIcon(item.status) as any} size={14} color={getStatusColor(item.status)} />
+                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                  {item.status?.toUpperCase()}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.itemSummary}>{item.items || 'No items listed'}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-              <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                {item.status?.toUpperCase()}
-              </Text>
-            </View>
+
+            {/* Item images row */}
+            {item.orderItems && item.orderItems.length > 0 && (
+              <View style={styles.imagesRow}>
+                {item.orderItems.slice(0, 4).map((oi, index) => (
+                  <View key={index} style={styles.itemImageWrapper}>
+                    {oi.image_url ? (
+                      <Image source={{ uri: oi.image_url }} style={styles.itemImage} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.itemImagePlaceholder}>
+                        <Ionicons name="fast-food-outline" size={20} color="#ddd" />
+                      </View>
+                    )}
+                    {/* Show +N if more than 4 items */}
+                    {index === 3 && item.orderItems!.length > 4 && (
+                      <View style={styles.moreOverlay}>
+                        <Text style={styles.moreText}>+{item.orderItems!.length - 4}</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+                <View style={styles.itemNamesList}>
+                  {item.orderItems.slice(0, 3).map((oi, i) => (
+                    <Text key={i} style={styles.itemNameText} numberOfLines={1}>
+                      • {oi.name} x{oi.quantity}
+                    </Text>
+                  ))}
+                  {item.orderItems.length > 3 && (
+                    <Text style={styles.itemNameText}>• +{item.orderItems.length - 3} more</Text>
+                  )}
+                </View>
+              </View>
+            )}
+
             <View style={styles.divider} />
+
+            {/* Footer */}
             <View style={styles.footer}>
-              <Text style={styles.date}>
-                {new Date(item.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </Text>
-              <TouchableOpacity style={styles.reorderBtn} onPress={() => handleReorder(item.id)}>
-                <Ionicons name="refresh-outline" size={18} color="#fff" />
+              <Text style={styles.totalAmount}>R{Number(item.total_amount).toFixed(2)}</Text>
+              <TouchableOpacity style={styles.reorderBtn} onPress={() => handleReorder(item.id, item.orderItems)}>
+                <Ionicons name="refresh-outline" size={16} color="#fff" />
                 <Text style={styles.reorderText}>Re-order</Text>
               </TouchableOpacity>
             </View>
@@ -129,18 +198,32 @@ const styles = StyleSheet.create({
   listContent: { padding: 20, paddingBottom: 10 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { fontSize: 26, fontWeight: 'bold', marginBottom: 20, color: '#333' },
-  orderCard: { backgroundColor: '#fff', borderRadius: 15, padding: 18, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8 },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+
+  orderCard: { backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8 },
+
+  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
   orderId: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  totalAmount: { fontSize: 18, fontWeight: 'bold', color: 'orange' },
-  itemSummary: { fontSize: 14, color: '#777', fontStyle: 'italic', marginBottom: 8 },
-  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginBottom: 4 },
+  date: { fontSize: 12, color: '#aaa', marginTop: 3 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#f5f5f5' },
   statusText: { fontSize: 11, fontWeight: 'bold' },
-  divider: { height: 1, backgroundColor: '#eee', marginVertical: 12 },
+
+  // Images row
+  imagesRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  itemImageWrapper: { width: 52, height: 52, borderRadius: 12, overflow: 'hidden', marginRight: 8, position: 'relative' },
+  itemImage: { width: '100%', height: '100%' },
+  itemImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' },
+  moreOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
+  moreText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  itemNamesList: { flex: 1 },
+  itemNameText: { fontSize: 12, color: '#777', marginBottom: 2 },
+
+  divider: { height: 1, backgroundColor: '#f0f0f0', marginVertical: 12 },
+
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  date: { fontSize: 13, color: '#aaa' },
-  reorderBtn: { flexDirection: 'row', backgroundColor: 'orange', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, alignItems: 'center' },
-  reorderText: { color: '#fff', fontWeight: 'bold', marginLeft: 5, fontSize: 14 },
+  totalAmount: { fontSize: 20, fontWeight: 'bold', color: 'orange' },
+  reorderBtn: { flexDirection: 'row', backgroundColor: 'orange', paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, alignItems: 'center', gap: 6, elevation: 2 },
+  reorderText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+
   emptyContainer: { alignItems: 'center', marginTop: 100 },
   emptyText: { color: '#bbb', fontSize: 18, marginTop: 15, marginBottom: 20 },
   shopBtn: { backgroundColor: 'orange', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 25 },
