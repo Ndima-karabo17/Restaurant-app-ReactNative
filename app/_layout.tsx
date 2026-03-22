@@ -14,7 +14,6 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ animation: 'fade' }} />
         <Stack.Screen name="signup" options={{animation:'fade'}}/>
-        <Stack.Screen name="home" options={{ headerShown: false }} />
         <Stack.Screen name="search" options={{ headerShown: false }} />
         <Stack.Screen name="location" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ headerShown: false }} />
